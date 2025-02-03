@@ -135,8 +135,8 @@ func TrackError(span trace.Span, err error) {
 	}
 }
 
-func EndSpan(span trace.Span, pErr *error, attributes ...attribute.KeyValue) {
-	TrackError(span, *pErr)
+func EndSpan(span trace.Span, err error, attributes ...attribute.KeyValue) {
+	TrackError(span, err)
 	span.SetAttributes(attributes...)
 	span.End()
 }
