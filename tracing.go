@@ -40,14 +40,14 @@ func attributes(attrs ...attribute.KeyValue) []attribute.KeyValue {
 	return attrs
 }
 
-func newTraceProvider(ctx context.Context, exp sdktrace.SpanExporter, cfg TracerConfig, version string, logger *zap.Logger) (tp *sdktrace.TracerProvider) {
+func newTraceProvider(ctx context.Context, exp sdktrace.SpanExporter, cfg TracerConfig, serviceName, version string, logger *zap.Logger) (tp *sdktrace.TracerProvider) {
 	hostname, err := reverseLookupHostname(ctx)
 	if err != nil {
 		logger.Warn("failed to reverse resolve hostname", zap.Error(err))
 		hostname = tryerr.Must(os.Hostname())
 	}
 	attrs := attributes(
-		semconv.ServiceName("btc-relayer"),
+		semconv.ServiceName(serviceName),
 		semconv.ServiceVersion(version),
 		attribute.String("symbiosis-finance.moniker", os.Getenv("REL_SYMBIOSIS_MONIKER")),
 		semconv.HostName(hostname),
@@ -90,7 +90,7 @@ func basicAuthOption(httpUrl string) otlptracehttp.Option {
 	})
 }
 
-func InitTracer(ctx context.Context, cfg TracerConfig, name, version string, logger *zap.Logger) {
+func InitTracer(ctx context.Context, cfg TracerConfig, tracerName, serviceName, version string, logger *zap.Logger) {
 	var exp sdktrace.SpanExporter
 	if cfg.EnableStdout {
 		exp = tryerr.Must(stdouttrace.New())
@@ -104,11 +104,11 @@ func InitTracer(ctx context.Context, cfg TracerConfig, name, version string, log
 		exp = tryerr.Must(otlptracehttp.New(ctx, options...))
 	}
 	if exp != nil {
-		tp := newTraceProvider(ctx, exp, cfg, version, logger)
+		tp := newTraceProvider(ctx, exp, cfg, serviceName, version, logger)
 		otel.SetTracerProvider(tp)
 		otel.SetTextMapPropagator(propagation.TraceContext{})
 	}
-	defaultTracerName = name
+	defaultTracerName = tracerName
 }
 
 func ShutdownTracer() {
