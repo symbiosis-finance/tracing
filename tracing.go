@@ -90,7 +90,7 @@ func basicAuthOption(httpUrl string) otlptracehttp.Option {
 	})
 }
 
-func InitTracer(ctx context.Context, cfg TracerConfig, tracerName, serviceName, version string, logger *zap.Logger) {
+func InitTracer(ctx context.Context, cfg TracerConfig, serviceName, version string, logger *zap.Logger) {
 	var exp sdktrace.SpanExporter
 	if cfg.EnableStdout {
 		exp = tryerr.Must(stdouttrace.New())
@@ -108,7 +108,6 @@ func InitTracer(ctx context.Context, cfg TracerConfig, tracerName, serviceName, 
 		otel.SetTracerProvider(tp)
 		otel.SetTextMapPropagator(propagation.TraceContext{})
 	}
-	defaultTracerName = tracerName
 }
 
 func ShutdownTracer() {
@@ -120,7 +119,7 @@ func ShutdownTracer() {
 	}
 }
 
-var defaultTracerName string
+var defaultTracerName string = "github.com/symbiosis-finance/tracing"
 
 func Tracer() trace.Tracer {
 	return otel.Tracer(defaultTracerName)
