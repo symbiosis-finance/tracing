@@ -79,10 +79,10 @@ func getSpanLabels(s sdktrace.ReadOnlySpan) prometheus.Labels {
 		attrMap[attr.Key] = attr.Value
 	}
 	return prometheus.Labels{
-		"name":    s.Name(),
-		"service": attrMap["service.name"].AsString(),
-		"moniker": attrMap["symbiosis-finance.moniker"].AsString(),
-		"version": attrMap["service.version"].AsString(),
+		"span_name": s.Name(),
+		"service":   attrMap["service.name"].AsString(),
+		"moniker":   attrMap["symbiosis-finance.moniker"].AsString(),
+		"version":   attrMap["service.version"].AsString(),
 	}
 }
 
