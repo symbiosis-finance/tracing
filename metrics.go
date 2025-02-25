@@ -16,7 +16,21 @@ import (
 	"go.uber.org/zap"
 )
 
-var spanLabels = []string{"name", "service", "moniker", "version"}
+var spanLabels = []string{"span_name", "service", "moniker", "version"}
+
+func getSpanLabels(s sdktrace.ReadOnlySpan) prometheus.Labels {
+	attrs := s.Resource().Attributes()
+	attrMap := make(map[attribute.Key]attribute.Value, len(attrs))
+	for _, attr := range attrs {
+		attrMap[attr.Key] = attr.Value
+	}
+	return prometheus.Labels{
+		"span_name": s.Name(),
+		"service":   attrMap["service.name"].AsString(),
+		"moniker":   attrMap["symbiosis-finance.moniker"].AsString(),
+		"version":   attrMap["service.version"].AsString(),
+	}
+}
 
 var spanStarted = promauto.NewCounterVec(prometheus.CounterOpts{
 	Name: "tracing_span_started",
@@ -71,20 +85,6 @@ func (metricsSpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 
 func (metricsSpanProcessor) Shutdown(ctx context.Context) error   { return nil }
 func (metricsSpanProcessor) ForceFlush(ctx context.Context) error { return nil }
-
-func getSpanLabels(s sdktrace.ReadOnlySpan) prometheus.Labels {
-	attrs := s.Resource().Attributes()
-	attrMap := make(map[attribute.Key]attribute.Value, len(attrs))
-	for _, attr := range attrs {
-		attrMap[attr.Key] = attr.Value
-	}
-	return prometheus.Labels{
-		"name":    s.Name(),
-		"service": attrMap["service.name"].AsString(),
-		"moniker": attrMap["symbiosis-finance.moniker"].AsString(),
-		"version": attrMap["service.version"].AsString(),
-	}
-}
 
 func RunMetricsApi(ctx context.Context, port int, logger *zap.Logger) {
 	mux := http.NewServeMux()
