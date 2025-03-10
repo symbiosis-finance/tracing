@@ -57,6 +57,11 @@ var spanCurrent = promauto.NewGaugeVec(prometheus.GaugeOpts{
 	Help: "Current span count",
 }, spanLabels)
 
+var spanDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+	Name: "tracing_span_duration",
+	Help: "Span duration histogram",
+}, spanLabels)
+
 type metricsSpanProcessor struct{}
 
 var _ sdktrace.SpanProcessor = metricsSpanProcessor{}
@@ -75,6 +80,7 @@ func (metricsSpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 	labels := getSpanLabels(s)
 	spanEnded.With(labels).Inc()
 	spanCurrent.With(labels).Dec()
+	spanDuration.With(labels).Observe(s.EndTime().Sub(s.StartTime()).Seconds())
 	switch s.Status().Code {
 	case codes.Ok:
 		spanSucceeded.With(labels).Inc()
