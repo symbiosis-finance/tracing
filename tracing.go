@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"iter"
+	"maps"
 	"net"
 	"net/url"
 	"os"
 	"reflect"
+	"slices"
 	"time"
 
 	"github.com/nikicat/tryerr"
@@ -69,19 +72,68 @@ func newTraceProvider(ctx context.Context, exp sdktrace.SpanExporter, cfg Tracer
 	if cfg.EnableMetrics {
 		options = append(options, sdktrace.WithSpanProcessor(newMetricsSpanProcessor()))
 	}
+	if len(cfg.SpanBlacklist) > 0 {
+		options = append(options, sdktrace.WithSampler(filteringSampler{
+			blacklistedSpans: maps.Collect(Map2(slices.Values(cfg.SpanBlacklist), func(s string) (string, any) { return s, nil })),
+		}))
+	}
 	tp = sdktrace.NewTracerProvider(options...)
 	logger.Info("tracing initialized", zap.Any("config", cfg), zap.String("hostname", hostname))
 	return
 }
 
+func Map[T, U any](seq iter.Seq[T], f func(T) U) iter.Seq[U] {
+	return func(yield func(U) bool) {
+		for a := range seq {
+			if !yield(f(a)) {
+				return
+			}
+		}
+	}
+}
+
+func Map2[T, U, V any](seq iter.Seq[T], f func(T) (U, V)) iter.Seq2[U, V] {
+	return func(yield func(U, V) bool) {
+		for a := range seq {
+			if !yield(f(a)) {
+				return
+			}
+		}
+	}
+}
+
+type filteringSampler struct {
+	blacklistedSpans map[string]any // list of spans to filter out
+}
+
+func (fs filteringSampler) ShouldSample(p sdktrace.SamplingParameters) sdktrace.SamplingResult {
+	if _, ok := fs.blacklistedSpans[p.Name]; ok {
+		return sdktrace.SamplingResult{
+			Decision:   sdktrace.Drop,
+			Tracestate: trace.SpanContextFromContext(p.ParentContext).TraceState(),
+		}
+	} else {
+		return sdktrace.SamplingResult{
+			Decision:   sdktrace.RecordAndSample,
+			Tracestate: trace.SpanContextFromContext(p.ParentContext).TraceState(),
+		}
+	}
+}
+
+func (s filteringSampler) Description() string {
+	return "FilteringSampler"
+}
+
 type TracerConfig struct {
-	// Only one is used
-	EnableStdout  bool
-	EnableLogs    bool
-	EnableMetrics bool
-	MetricsPort   int
-	GrpcUrl       string
-	HttpUrl       string
+	// Only one of outputs is used
+	EnableStdout bool
+	GrpcUrl      string
+	HttpUrl      string
+
+	EnableLogs    bool     // Enable logging of span's start/end
+	EnableMetrics bool     // Enable span metrics
+	MetricsPort   int      // Port to expose metrics on
+	SpanBlacklist []string // List of spans to filter out
 }
 
 func DefaultTracerConfig() TracerConfig {
@@ -145,6 +197,10 @@ func TrackError(span trace.Span, err error) {
 	} else {
 		span.SetStatus(codes.Error, err.Error())
 	}
+}
+
+func StartSpan(ctx context.Context, spanName string, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
+	return Tracer().Start(ctx, spanName, opts...)
 }
 
 func EndSpan(span trace.Span, err *error, attributes ...attribute.KeyValue) {
