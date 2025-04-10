@@ -22,6 +22,7 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
@@ -54,14 +55,14 @@ func newTraceProvider(ctx context.Context, exp sdktrace.SpanExporter, cfg Tracer
 		semconv.ServiceName(serviceName),
 		semconv.ServiceVersion(version),
 		semconv.ServiceInstanceID(uuid.NewString()),
+		semconv.TelemetrySDKName("opentelemetry"),
+		semconv.TelemetrySDKLanguageGo,
+		semconv.TelemetrySDKVersion(sdk.Version()),
 		semconv.HostName(hostname),
 		semconv.DeploymentEnvironmentName(os.Getenv("APP_ENV")),
 	)
 	attrs = append(attrs, resourceAttrs...)
-	r := tryerr.Must(resource.Merge(
-		resource.Default(),
-		resource.NewWithAttributes(semconv.SchemaURL, attrs...),
-	))
+	r := resource.NewWithAttributes(semconv.SchemaURL, attrs...)
 
 	options := []sdktrace.TracerProviderOption{
 		sdktrace.WithResource(r),
