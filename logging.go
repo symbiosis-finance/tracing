@@ -61,7 +61,7 @@ func (zc zapClock) NewTicker(d time.Duration) *time.Ticker {
 
 func (lsp loggingSpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 	for _, ev := range s.Events() {
-		lsp.endLogger.WithOptions(zap.WithClock(zapClock{ev.Time})).Debug(ev.Name, eventToZapFields(s, ev)...)
+		lsp.endLogger.WithOptions(zap.WithClock(zapClock{ev.Time})).Debug(ev.Name+" "+s.Name(), eventToZapFields(s, ev)...)
 	}
 	lsp.endLogger.Debug("end "+s.Name(), spanToZapFields(s)...)
 }
