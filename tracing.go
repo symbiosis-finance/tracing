@@ -13,6 +13,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nikicat/tryerr"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -23,7 +24,7 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
@@ -43,7 +44,7 @@ func attributes(attrs ...attribute.KeyValue) []attribute.KeyValue {
 	return attrs
 }
 
-func newTraceProvider(ctx context.Context, exp sdktrace.SpanExporter, cfg TracerConfig, serviceName, version string, logger *zap.Logger) (tp *sdktrace.TracerProvider) {
+func newTraceProvider(ctx context.Context, exp sdktrace.SpanExporter, cfg TracerConfig, serviceName, version string, logger *zap.Logger, resourceAttrs []attribute.KeyValue) (tp *sdktrace.TracerProvider) {
 	hostname, err := reverseLookupHostname(ctx)
 	if err != nil {
 		logger.Warn("failed to reverse resolve hostname", zap.Error(err))
@@ -52,9 +53,11 @@ func newTraceProvider(ctx context.Context, exp sdktrace.SpanExporter, cfg Tracer
 	attrs := attributes(
 		semconv.ServiceName(serviceName),
 		semconv.ServiceVersion(version),
-		attribute.String("symbiosis-finance.moniker", os.Getenv("REL_SYMBIOSIS_MONIKER")),
+		semconv.ServiceInstanceID(uuid.NewString()),
 		semconv.HostName(hostname),
+		semconv.DeploymentEnvironmentName(os.Getenv("APP_ENV")),
 	)
+	attrs = append(attrs, resourceAttrs...)
 	r := tryerr.Must(resource.Merge(
 		resource.Default(),
 		resource.NewWithAttributes(semconv.SchemaURL, attrs...),
@@ -154,7 +157,7 @@ func basicAuthOption(httpUrl string) otlptracehttp.Option {
 	})
 }
 
-func InitTracer(ctx context.Context, cfg TracerConfig, serviceName, version string, logger *zap.Logger) {
+func InitTracer(ctx context.Context, cfg TracerConfig, serviceName, version string, logger *zap.Logger, resourceAttrs ...attribute.KeyValue) {
 	var exp sdktrace.SpanExporter
 	if cfg.EnableStdout {
 		exp = tryerr.Must(stdouttrace.New())
@@ -170,7 +173,7 @@ func InitTracer(ctx context.Context, cfg TracerConfig, serviceName, version stri
 	if cfg.MetricsPort != 0 {
 		RunMetricsApi(ctx, cfg.MetricsPort, logger)
 	}
-	tp := newTraceProvider(ctx, exp, cfg, serviceName, version, logger)
+	tp := newTraceProvider(ctx, exp, cfg, serviceName, version, logger, resourceAttrs)
 	otel.SetTracerProvider(tp)
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 }
