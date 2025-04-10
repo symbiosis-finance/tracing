@@ -2,6 +2,7 @@ package tracing
 
 import (
 	"fmt"
+	"os"
 
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -41,4 +42,8 @@ const LogIndexKey = attribute.Key("chain.log_index")
 
 func LogIndex(index uint) attribute.KeyValue {
 	return TransactionIDKey.Int(int(index))
+}
+
+func AttributeFromEnv(key string, envVar string) attribute.KeyValue {
+	return attribute.String(key, os.Getenv(envVar))
 }
