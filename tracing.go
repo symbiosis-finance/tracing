@@ -3,6 +3,7 @@ package tracing
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"iter"
 	"maps"
@@ -30,10 +31,12 @@ import (
 	"go.uber.org/zap"
 )
 
+var errLookupTimeout = errors.New("hostname lookup timeout")
+
 func reverseLookupHostname(ctx context.Context) (rHost string, err error) {
 	defer tryerr.Catch(&err)
 	host := tryerr.Try(os.Hostname()).Err("failed to obtain hostname")
-	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	ctx, cancel := context.WithTimeoutCause(ctx, time.Second, errLookupTimeout)
 	defer cancel()
 	addrs := tryerr.Try(net.DefaultResolver.LookupIPAddr(ctx, host)).Err("failed to lookup ip addr")
 	rHosts := tryerr.Try(net.DefaultResolver.LookupAddr(ctx, addrs[0].String())).Err("failed to reverse lookup host")
