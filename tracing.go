@@ -207,6 +207,9 @@ func TrackError(span trace.Span, err error) {
 }
 
 func StartSpan(ctx context.Context, spanName string, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
+	if deadline, ok := ctx.Deadline(); ok {
+		opts = append(opts, trace.WithAttributes(attribute.Stringer("context_timeout", time.Until(deadline))))
+	}
 	return Tracer().Start(ctx, spanName, opts...)
 }
 
