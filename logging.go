@@ -27,7 +27,7 @@ func newLoggingSpanProcessor(logger *zap.Logger) loggingSpanProcessor {
 	}
 }
 
-func getLogFields(ctx context.Context) []attribute.KeyValue {
+func GetLogFields(ctx context.Context) []attribute.KeyValue {
 	if v := ctx.Value(ctxAttributeKey); v != nil {
 		return v.([]attribute.KeyValue)
 	}
@@ -35,11 +35,11 @@ func getLogFields(ctx context.Context) []attribute.KeyValue {
 }
 
 func AddLogFields(ctx context.Context, fields ...attribute.KeyValue) context.Context {
-	return context.WithValue(ctx, ctxAttributeKey, append(getLogFields(ctx), fields...))
+	return context.WithValue(ctx, ctxAttributeKey, append(GetLogFields(ctx), fields...))
 }
 
 func (lsp loggingSpanProcessor) OnStart(ctx context.Context, s sdktrace.ReadWriteSpan) {
-	if fields := getLogFields(ctx); fields != nil {
+	if fields := GetLogFields(ctx); fields != nil {
 		s.SetAttributes(append(fields, s.Attributes()...)...)
 	}
 	lsp.startLogger.Debug("start "+s.Name(), spanToZapFields(s)...)
@@ -60,10 +60,16 @@ func (zc zapClock) NewTicker(d time.Duration) *time.Ticker {
 }
 
 func (lsp loggingSpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
-	for _, ev := range s.Events() {
-		lsp.endLogger.WithOptions(zap.WithClock(zapClock{ev.Time})).Debug(ev.Name+" "+s.Name(), eventToZapFields(s, ev)...)
+	var level zapcore.Level
+	if s.Status().Code == codes.Error {
+		level = zapcore.ErrorLevel
+	} else {
+		level = zapcore.DebugLevel
 	}
-	lsp.endLogger.Debug("end "+s.Name(), spanToZapFields(s)...)
+	for _, ev := range s.Events() {
+		lsp.endLogger.WithOptions(zap.WithClock(zapClock{ev.Time})).Log(level, ev.Name+" "+s.Name(), eventToZapFields(s, ev)...)
+	}
+	lsp.endLogger.Log(level, "end "+s.Name(), spanToZapFields(s)...)
 }
 
 func (lsp loggingSpanProcessor) Shutdown(ctx context.Context) error   { return nil }
