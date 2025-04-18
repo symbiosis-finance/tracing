@@ -239,12 +239,14 @@ func isNil(i any) bool {
 	}
 }
 
+// Store trace attributes from ctx to MapCarrier
 func StoreTrace(ctx context.Context) (m propagation.MapCarrier) {
 	m = make(propagation.MapCarrier)
 	otel.GetTextMapPropagator().Inject(ctx, m)
 	return
 }
 
+// Load trace attributes from MapCarrier to returned context
 func LoadTrace(ctx context.Context, m propagation.MapCarrier) context.Context {
 	return otel.GetTextMapPropagator().Extract(ctx, m)
 }
