@@ -85,7 +85,8 @@ func newTraceProvider(ctx context.Context, exp sdktrace.SpanExporter, cfg Tracer
 		}))
 	}
 	tp = sdktrace.NewTracerProvider(options...)
-	logger.Info("tracing initialized", zap.Reflect("config", cfg), zap.String("hostname", hostname))
+	fields := append([]zap.Field{zap.Reflect("config", cfg), zap.String("hostname", hostname)}, attributesToZapFields(resourceAttrs)...)
+	logger.Info("tracing initialized", fields...)
 	return
 }
 
