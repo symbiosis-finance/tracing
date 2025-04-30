@@ -47,7 +47,7 @@ func reverseLookupHostname(ctx context.Context) (rHost string, err error) {
 type attrMap map[attribute.Key]attribute.KeyValue
 
 func addAttrIfAbsent(attrs attrMap, attr attribute.KeyValue) {
-	if _, ok := attrs[attr.Key]; !ok && attr.Valid() {
+	if existingAttr, ok := attrs[attr.Key]; (!ok || !existingAttr.Valid()) && attr.Valid() {
 		attrs[attr.Key] = attr
 	}
 }
