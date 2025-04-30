@@ -17,7 +17,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var spanLabels = []string{"span_name", "service", "moniker", "version", "env", "command"}
+var spanLabels = []string{"span_name", "service", "moniker", "version", "env"}
 
 func getLabel(attrMap map[attribute.Key]attribute.Value, key attribute.Key) (label string) {
 	if attr, ok := attrMap[key]; ok {
