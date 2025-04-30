@@ -3,10 +3,12 @@ package tracing
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -123,6 +125,7 @@ func spanToZapFields(s sdktrace.ReadOnlySpan) []zap.Field {
 	if s.Status().Code == codes.Error {
 		fields = append(fields, zap.String("span.error", s.Status().Description))
 	}
+	fields = append(fields, resourceToZapFields(s.Resource())...)
 	fields = append(fields, zap.Stringer("span.kind", s.SpanKind()))
 	fields = append(fields, spanContextToZapFields(s.Parent(), "parent")...)
 	return append(fields, attributesToZapFields(s.Attributes())...)
@@ -132,5 +135,18 @@ func eventToZapFields(s sdktrace.ReadOnlySpan, ev sdktrace.Event) (fields []zap.
 	fields = spanContextToZapFields(s.SpanContext(), "span")
 	fields = append(fields, attributesToZapFields(ev.Attributes)...)
 	fields = append(fields, attributesToZapFields(s.Attributes())...)
+	return
+}
+
+func resourceToZapFields(r *resource.Resource) (fields []zap.Field) {
+	it := r.Iter()
+	for it.Next() {
+		attr := it.Attribute()
+		if strings.HasPrefix(string(attr.Key), "telemetry.") {
+			// telemetry.* attrs are not very useful in logs.
+			continue
+		}
+		fields = append(fields, attributeToZapField(attr))
+	}
 	return
 }

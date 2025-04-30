@@ -44,28 +44,36 @@ func reverseLookupHostname(ctx context.Context) (rHost string, err error) {
 	return
 }
 
-func attributes(attrs ...attribute.KeyValue) []attribute.KeyValue {
-	return attrs
+type attrMap map[attribute.Key]attribute.KeyValue
+
+func addAttrIfAbsent(attrs attrMap, attr attribute.KeyValue) {
+	if _, ok := attrs[attr.Key]; !ok {
+		attrs[attr.Key] = attr
+	}
 }
 
-func newTraceProvider(ctx context.Context, exp sdktrace.SpanExporter, cfg TracerConfig, serviceName, version string, logger *zap.Logger, resourceAttrs []attribute.KeyValue) (tp *sdktrace.TracerProvider) {
-	hostname, err := reverseLookupHostname(ctx)
-	if err != nil {
-		logger.Warn("failed to reverse resolve hostname", zap.Error(err))
-		hostname = tryerr.Must(os.Hostname())
+func newTraceProvider(ctx context.Context, exp sdktrace.SpanExporter, cfg TracerConfig, logger *zap.Logger, resourceAttrs []attribute.KeyValue) (tp *sdktrace.TracerProvider) {
+	attrs := make(attrMap)
+	for _, attr := range resourceAttrs {
+		attrs[attr.Key] = attr
 	}
-	attrs := attributes(
-		semconv.ServiceName(serviceName),
-		semconv.ServiceVersion(version),
-		semconv.ServiceInstanceID(uuid.NewString()),
-		semconv.TelemetrySDKName("opentelemetry"),
-		semconv.TelemetrySDKLanguageGo,
-		semconv.TelemetrySDKVersion(sdk.Version()),
-		semconv.HostName(hostname),
-		semconv.DeploymentEnvironmentName(os.Getenv("APP_ENV")),
-	)
-	attrs = append(attrs, resourceAttrs...)
-	r := resource.NewWithAttributes(semconv.SchemaURL, attrs...)
+	if _, ok := attrs[semconv.HostNameKey]; !ok {
+		hostname, err := reverseLookupHostname(ctx)
+		if err != nil {
+			logger.Warn("failed to reverse resolve hostname", zap.Error(err))
+			hostname = tryerr.Must(os.Hostname())
+		}
+		attrs[semconv.HostNameKey] = semconv.HostName(hostname)
+	}
+	addAttrIfAbsent(attrs, semconv.ServiceInstanceID(uuid.NewString()))
+	addAttrIfAbsent(attrs, semconv.TelemetrySDKName("opentelemetry"))
+	addAttrIfAbsent(attrs, semconv.TelemetrySDKLanguageGo)
+	addAttrIfAbsent(attrs, semconv.TelemetrySDKVersion(sdk.Version()))
+	addAttrIfAbsent(attrs, semconv.DeploymentEnvironmentName(os.Getenv("APP_ENV")))
+	addAttrIfAbsent(attrs, semconv.ServiceName(os.Getenv("SERVICE")))
+	addAttrIfAbsent(attrs, semconv.ServiceVersion(Version))
+	attrSlice := slices.Collect(maps.Values(attrs))
+	r := resource.NewWithAttributes(semconv.SchemaURL, attrSlice...)
 
 	options := []sdktrace.TracerProviderOption{
 		sdktrace.WithResource(r),
@@ -85,7 +93,7 @@ func newTraceProvider(ctx context.Context, exp sdktrace.SpanExporter, cfg Tracer
 		}))
 	}
 	tp = sdktrace.NewTracerProvider(options...)
-	fields := append([]zap.Field{zap.Reflect("config", cfg), zap.String("hostname", hostname)}, attributesToZapFields(resourceAttrs)...)
+	fields := append([]zap.Field{zap.Reflect("config", cfg)}, attributesToZapFields(attrSlice)...)
 	logger.Info("tracing initialized", fields...)
 	return
 }
@@ -162,7 +170,7 @@ func basicAuthOption(httpUrl string) otlptracehttp.Option {
 	})
 }
 
-func InitTracer(ctx context.Context, cfg TracerConfig, serviceName, version string, logger *zap.Logger, resourceAttrs ...attribute.KeyValue) {
+func InitTracer(ctx context.Context, cfg TracerConfig, logger *zap.Logger, resourceAttrs ...attribute.KeyValue) {
 	var exp sdktrace.SpanExporter
 	if cfg.EnableStdout {
 		exp = tryerr.Must(stdouttrace.New())
@@ -178,7 +186,7 @@ func InitTracer(ctx context.Context, cfg TracerConfig, serviceName, version stri
 	if cfg.MetricsPort != 0 {
 		RunMetricsApi(ctx, cfg.MetricsPort, logger)
 	}
-	tp := newTraceProvider(ctx, exp, cfg, serviceName, version, logger, resourceAttrs)
+	tp := newTraceProvider(ctx, exp, cfg, logger, resourceAttrs)
 	otel.SetTracerProvider(tp)
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 }
