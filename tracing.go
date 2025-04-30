@@ -46,18 +46,18 @@ func reverseLookupHostname(ctx context.Context) (rHost string, err error) {
 
 type attrMap map[attribute.Key]attribute.KeyValue
 
-func addAttrIfAbsent(attrs attrMap, attr attribute.KeyValue) {
-	if existingAttr, ok := attrs[attr.Key]; (!ok || !existingAttr.Valid()) && attr.Valid() {
-		attrs[attr.Key] = attr
+func addAttrIfAbsent(attrs attrMap, newAttr attribute.KeyValue) {
+	if existingAttr, ok := attrs[newAttr.Key]; (!ok || !existingAttr.Valid()) && newAttr.Valid() {
+		attrs[newAttr.Key] = newAttr
 	}
 }
 
 func newTraceProvider(ctx context.Context, exp sdktrace.SpanExporter, cfg TracerConfig, logger *zap.Logger, resourceAttrs []attribute.KeyValue) (tp *sdktrace.TracerProvider) {
-	attrs := make(attrMap)
+	attrs := make(attrMap, len(resourceAttrs))
 	for _, attr := range resourceAttrs {
 		attrs[attr.Key] = attr
 	}
-	if _, ok := attrs[semconv.HostNameKey]; !ok {
+	if attr, ok := attrs[semconv.HostNameKey]; !ok || !attr.Valid() {
 		hostname, err := reverseLookupHostname(ctx)
 		if err != nil {
 			logger.Warn("failed to reverse resolve hostname", zap.Error(err))

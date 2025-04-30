@@ -37,7 +37,6 @@ func getSpanLabels(s sdktrace.ReadOnlySpan) prometheus.Labels {
 		"service":   getLabel(attrMap, semconv.ServiceNameKey),
 		"version":   getLabel(attrMap, semconv.ServiceVersionKey),
 		"env":       getLabel(attrMap, semconv.ServiceNamespaceKey),
-		"command":   getLabel(attrMap, semconv.ProcessCommandKey),
 		"moniker":   getLabel(attrMap, MonikerKey),
 	}
 }

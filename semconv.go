@@ -46,7 +46,7 @@ func LogIndex(index uint) attribute.KeyValue {
 }
 
 func AttributeFromEnv(key attribute.Key, envVar string) (attr attribute.KeyValue) {
-	if value, ok := os.LookupEnv(string(key)); ok {
+	if value, ok := os.LookupEnv(envVar); ok {
 		attr = key.String(value)
 	}
 	return
