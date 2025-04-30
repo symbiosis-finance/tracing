@@ -77,7 +77,10 @@ func (lsp loggingSpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 func (lsp loggingSpanProcessor) Shutdown(ctx context.Context) error   { return nil }
 func (lsp loggingSpanProcessor) ForceFlush(ctx context.Context) error { return nil }
 
-func attributeToZapField(attr attribute.KeyValue) zap.Field {
+func AttributeToZapField(attr attribute.KeyValue) zap.Field {
+	if !attr.Valid() {
+		return zap.Skip()
+	}
 	key := string(attr.Key)
 	value := attr.Value
 	switch value.Type() {
@@ -102,9 +105,9 @@ func attributeToZapField(attr attribute.KeyValue) zap.Field {
 	}
 }
 
-func attributesToZapFields(attrs []attribute.KeyValue) (fields []zap.Field) {
+func attributesToZapFields(attrs ...attribute.KeyValue) (fields []zap.Field) {
 	for _, attr := range attrs {
-		fields = append(fields, attributeToZapField(attr))
+		fields = append(fields, AttributeToZapField(attr))
 	}
 	return
 }
@@ -128,13 +131,13 @@ func spanToZapFields(s sdktrace.ReadOnlySpan) []zap.Field {
 	fields = append(fields, resourceToZapFields(s.Resource())...)
 	fields = append(fields, zap.Stringer("span.kind", s.SpanKind()))
 	fields = append(fields, spanContextToZapFields(s.Parent(), "parent")...)
-	return append(fields, attributesToZapFields(s.Attributes())...)
+	return append(fields, attributesToZapFields(s.Attributes()...)...)
 }
 
 func eventToZapFields(s sdktrace.ReadOnlySpan, ev sdktrace.Event) (fields []zap.Field) {
 	fields = spanContextToZapFields(s.SpanContext(), "span")
-	fields = append(fields, attributesToZapFields(ev.Attributes)...)
-	fields = append(fields, attributesToZapFields(s.Attributes())...)
+	fields = append(fields, attributesToZapFields(ev.Attributes...)...)
+	fields = append(fields, attributesToZapFields(s.Attributes()...)...)
 	return
 }
 
@@ -146,7 +149,16 @@ func resourceToZapFields(r *resource.Resource) (fields []zap.Field) {
 			// telemetry.* attrs are not very useful in logs.
 			continue
 		}
-		fields = append(fields, attributeToZapField(attr))
+		fields = append(fields, AttributeToZapField(attr))
 	}
 	return
+}
+
+func DefaultZapFields() []zap.Field {
+	return attributesToZapFields(
+		VersionAttr(),
+		AppEnvFromEnv(),
+		MonikerAttrFromEnv(),
+		ServiceNameFromEnv(),
+	)
 }

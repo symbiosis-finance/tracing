@@ -47,7 +47,7 @@ func reverseLookupHostname(ctx context.Context) (rHost string, err error) {
 type attrMap map[attribute.Key]attribute.KeyValue
 
 func addAttrIfAbsent(attrs attrMap, attr attribute.KeyValue) {
-	if _, ok := attrs[attr.Key]; !ok {
+	if _, ok := attrs[attr.Key]; !ok && attr.Valid() {
 		attrs[attr.Key] = attr
 	}
 }
@@ -69,9 +69,11 @@ func newTraceProvider(ctx context.Context, exp sdktrace.SpanExporter, cfg Tracer
 	addAttrIfAbsent(attrs, semconv.TelemetrySDKName("opentelemetry"))
 	addAttrIfAbsent(attrs, semconv.TelemetrySDKLanguageGo)
 	addAttrIfAbsent(attrs, semconv.TelemetrySDKVersion(sdk.Version()))
-	addAttrIfAbsent(attrs, semconv.DeploymentEnvironmentName(os.Getenv("APP_ENV")))
-	addAttrIfAbsent(attrs, semconv.ServiceName(os.Getenv("SERVICE")))
-	addAttrIfAbsent(attrs, semconv.ServiceVersion(Version))
+	addAttrIfAbsent(attrs, semconv.ProcessCommand(os.Args[0]))
+	addAttrIfAbsent(attrs, VersionAttr())
+	addAttrIfAbsent(attrs, MonikerAttrFromEnv())
+	addAttrIfAbsent(attrs, AppEnvFromEnv())
+	addAttrIfAbsent(attrs, ServiceNameFromEnv())
 	attrSlice := slices.Collect(maps.Values(attrs))
 	r := resource.NewWithAttributes(semconv.SchemaURL, attrSlice...)
 
@@ -93,7 +95,7 @@ func newTraceProvider(ctx context.Context, exp sdktrace.SpanExporter, cfg Tracer
 		}))
 	}
 	tp = sdktrace.NewTracerProvider(options...)
-	fields := append([]zap.Field{zap.Reflect("config", cfg)}, attributesToZapFields(attrSlice)...)
+	fields := append([]zap.Field{zap.Reflect("config", cfg)}, attributesToZapFields(attrSlice...)...)
 	logger.Info("tracing initialized", fields...)
 	return
 }

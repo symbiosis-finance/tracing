@@ -13,10 +13,18 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
 	"go.uber.org/zap"
 )
 
-var spanLabels = []string{"span_name", "service", "moniker", "version"}
+var spanLabels = []string{"span_name", "service", "moniker", "version", "env", "command"}
+
+func getLabel(attrMap map[attribute.Key]attribute.Value, key attribute.Key) (label string) {
+	if attr, ok := attrMap[key]; ok {
+		label = attr.AsString()
+	}
+	return
+}
 
 func getSpanLabels(s sdktrace.ReadOnlySpan) prometheus.Labels {
 	attrs := s.Resource().Attributes()
@@ -26,9 +34,11 @@ func getSpanLabels(s sdktrace.ReadOnlySpan) prometheus.Labels {
 	}
 	return prometheus.Labels{
 		"span_name": s.Name(),
-		"service":   attrMap["service.name"].AsString(),
-		"moniker":   attrMap["symbiosis-finance.moniker"].AsString(),
-		"version":   attrMap["service.version"].AsString(),
+		"service":   getLabel(attrMap, semconv.ServiceNameKey),
+		"version":   getLabel(attrMap, semconv.ServiceVersionKey),
+		"env":       getLabel(attrMap, semconv.ServiceNamespaceKey),
+		"command":   getLabel(attrMap, semconv.ProcessCommandKey),
+		"moniker":   getLabel(attrMap, MonikerKey),
 	}
 }
 

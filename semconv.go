@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"go.opentelemetry.io/otel/attribute"
+	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
 )
 
 const ChainIDKey = attribute.Key("chain.id")
@@ -44,6 +45,27 @@ func LogIndex(index uint) attribute.KeyValue {
 	return TransactionIDKey.Int(int(index))
 }
 
-func AttributeFromEnv(key string, envVar string) attribute.KeyValue {
-	return attribute.String(key, os.Getenv(envVar))
+func AttributeFromEnv(key attribute.Key, envVar string) (attr attribute.KeyValue) {
+	if value, ok := os.LookupEnv(string(key)); ok {
+		attr = key.String(value)
+	}
+	return
+}
+
+const MonikerKey = attribute.Key("moniker")
+
+func Moniker(moniker string) attribute.KeyValue {
+	return MonikerKey.String(moniker)
+}
+
+func MonikerAttrFromEnv() attribute.KeyValue {
+	return AttributeFromEnv(MonikerKey, "MONIKER")
+}
+
+func AppEnvFromEnv() attribute.KeyValue {
+	return AttributeFromEnv(semconv.ServiceNamespaceKey, "APP_ENV")
+}
+
+func ServiceNameFromEnv() attribute.KeyValue {
+	return AttributeFromEnv(semconv.ServiceNameKey, "SERVICE")
 }
