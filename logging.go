@@ -24,7 +24,7 @@ var _ sdktrace.SpanProcessor = loggingSpanProcessor{}
 
 func newLoggingSpanProcessor(logger *zap.Logger) loggingSpanProcessor {
 	return loggingSpanProcessor{
-		startLogger: logger.WithOptions(zap.AddCallerSkip(2)),
+		startLogger: logger.WithOptions(zap.AddCallerSkip(3)),
 		endLogger:   logger.WithOptions(zap.AddCallerSkip(3)),
 	}
 }
