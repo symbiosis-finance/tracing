@@ -42,7 +42,7 @@ func TransactionID(txID fmt.Stringer) attribute.KeyValue {
 const LogIndexKey = attribute.Key("chain.log_index")
 
 func LogIndex(index uint) attribute.KeyValue {
-	return TransactionIDKey.Int(int(index))
+	return LogIndexKey.Int(int(index))
 }
 
 func AttributeFromEnv(key attribute.Key, envVar string) (attr attribute.KeyValue) {
