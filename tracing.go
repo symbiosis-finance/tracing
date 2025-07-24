@@ -271,3 +271,11 @@ func ErrorAttr(key string, err error) (attr attribute.KeyValue) {
 	}
 	return
 }
+
+func StringerSlice[T fmt.Stringer](k string, values []T) (attr attribute.KeyValue) {
+	vals := make([]string, len(values))
+	for i, v := range values {
+		vals[i] = v.String()
+	}
+	return attribute.StringSlice(k, vals)
+}
