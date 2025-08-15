@@ -131,6 +131,9 @@ func spanToZapFields(s sdktrace.ReadOnlySpan) []zap.Field {
 	fields = append(fields, resourceToZapFields(s.Resource())...)
 	fields = append(fields, zap.Stringer("span.kind", s.SpanKind()))
 	fields = append(fields, spanContextToZapFields(s.Parent(), "parent")...)
+	if end := s.EndTime(); !end.IsZero() {
+		fields = append(fields, zap.Duration("span.duration", end.Sub(s.StartTime())))
+	}
 	return append(fields, attributesToZapFields(s.Attributes()...)...)
 }
 
