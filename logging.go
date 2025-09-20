@@ -18,14 +18,16 @@ import (
 type loggingSpanProcessor struct {
 	startLogger *zap.Logger
 	endLogger   *zap.Logger
+	cfg         TracerLogsConfig
 }
 
 var _ sdktrace.SpanProcessor = loggingSpanProcessor{}
 
-func newLoggingSpanProcessor(logger *zap.Logger) loggingSpanProcessor {
+func newLoggingSpanProcessor(logger *zap.Logger, cfg TracerLogsConfig) loggingSpanProcessor {
 	return loggingSpanProcessor{
 		startLogger: logger.WithOptions(zap.AddCallerSkip(3)),
 		endLogger:   logger.WithOptions(zap.AddCallerSkip(3)),
+		cfg:         cfg,
 	}
 }
 
@@ -44,7 +46,7 @@ func (lsp loggingSpanProcessor) OnStart(ctx context.Context, s sdktrace.ReadWrit
 	if fields := GetLogFields(ctx); fields != nil {
 		s.SetAttributes(append(fields, s.Attributes()...)...)
 	}
-	lsp.startLogger.Debug("start "+s.Name(), spanToZapFields(s)...)
+	lsp.startLogger.Debug("start "+s.Name(), lsp.spanToZapFields(s)...)
 }
 
 type zapClock struct {
@@ -69,9 +71,9 @@ func (lsp loggingSpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 		level = zapcore.DebugLevel
 	}
 	for _, ev := range s.Events() {
-		lsp.endLogger.WithOptions(zap.WithClock(zapClock{ev.Time})).Log(level, ev.Name+" "+s.Name(), eventToZapFields(s, ev)...)
+		lsp.endLogger.WithOptions(zap.WithClock(zapClock{ev.Time})).Log(level, ev.Name+" "+s.Name(), lsp.eventToZapFields(s, ev)...)
 	}
-	lsp.endLogger.Log(level, "end "+s.Name(), spanToZapFields(s)...)
+	lsp.endLogger.Log(level, "end "+s.Name(), lsp.spanToZapFields(s)...)
 }
 
 func (lsp loggingSpanProcessor) Shutdown(ctx context.Context) error   { return nil }
@@ -116,29 +118,36 @@ type ctxAttribute struct{}
 
 var ctxAttributeKey ctxAttribute
 
-func spanContextToZapFields(spanCtx trace.SpanContext, prefix string) []zap.Field {
+func (lsp loggingSpanProcessor) spanContextToZapFields(spanCtx trace.SpanContext, prefix string) []zap.Field {
 	return []zap.Field{
 		zap.Stringer(prefix+".traceID", spanCtx.TraceID()),
 		zap.Stringer(prefix+".ID", spanCtx.SpanID()),
 	}
 }
 
-func spanToZapFields(s sdktrace.ReadOnlySpan) []zap.Field {
-	fields := spanContextToZapFields(s.SpanContext(), "span")
+func (lsp loggingSpanProcessor) spanToZapFields(s sdktrace.ReadOnlySpan) []zap.Field {
+	var fields []zap.Field
+	if lsp.cfg.EnableSpanContextAttrs {
+		fields = append(fields, lsp.spanContextToZapFields(s.SpanContext(), "span")...)
+	}
 	if s.Status().Code == codes.Error {
 		fields = append(fields, zap.String("span.error", s.Status().Description))
 	}
-	fields = append(fields, resourceToZapFields(s.Resource())...)
+	if lsp.cfg.EnableResourceAttrs {
+		fields = append(fields, resourceToZapFields(s.Resource())...)
+	}
 	fields = append(fields, zap.Stringer("span.kind", s.SpanKind()))
-	fields = append(fields, spanContextToZapFields(s.Parent(), "parent")...)
+	if lsp.cfg.EnableParentSpanAttrs {
+		fields = append(fields, lsp.spanContextToZapFields(s.Parent(), "parent")...)
+	}
 	if end := s.EndTime(); !end.IsZero() {
 		fields = append(fields, zap.Duration("span.duration", end.Sub(s.StartTime())))
 	}
 	return append(fields, attributesToZapFields(s.Attributes()...)...)
 }
 
-func eventToZapFields(s sdktrace.ReadOnlySpan, ev sdktrace.Event) (fields []zap.Field) {
-	fields = spanContextToZapFields(s.SpanContext(), "span")
+func (lsp loggingSpanProcessor) eventToZapFields(s sdktrace.ReadOnlySpan, ev sdktrace.Event) (fields []zap.Field) {
+	fields = lsp.spanContextToZapFields(s.SpanContext(), "span")
 	fields = append(fields, attributesToZapFields(ev.Attributes...)...)
 	fields = append(fields, attributesToZapFields(s.Attributes()...)...)
 	return

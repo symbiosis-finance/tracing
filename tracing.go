@@ -84,7 +84,7 @@ func newTraceProvider(ctx context.Context, exp sdktrace.SpanExporter, cfg Tracer
 		options = append(options, sdktrace.WithBatcher(exp))
 	}
 	if cfg.EnableLogs {
-		options = append(options, sdktrace.WithSpanProcessor(newLoggingSpanProcessor(logger)))
+		options = append(options, sdktrace.WithSpanProcessor(newLoggingSpanProcessor(logger, cfg.LogFilters)))
 	}
 	if cfg.EnableMetrics {
 		options = append(options, sdktrace.WithSpanProcessor(newMetricsSpanProcessor()))
@@ -142,20 +142,28 @@ func (s filteringSampler) Description() string {
 	return "FilteringSampler"
 }
 
+type TracerLogsConfig struct {
+	EnableResourceAttrs    bool
+	EnableParentSpanAttrs  bool
+	EnableSpanContextAttrs bool
+}
+
 type TracerConfig struct {
 	// Only one of outputs is used
 	EnableStdout bool
 	GrpcUrl      string
 	HttpUrl      string
 
-	EnableLogs    bool     // Enable logging of span's start/end
+	EnableLogs    bool // Enable logging of span's start/end
+	LogFilters    TracerLogsConfig
 	EnableMetrics bool     // Enable span metrics
 	MetricsPort   int      // Port to expose metrics on
 	SpanBlacklist []string // List of spans to filter out
 }
 
-func DefaultTracerConfig() TracerConfig {
-	return TracerConfig{}
+func DefaultTracerConfig() (cfg TracerConfig) {
+	cfg.LogFilters.EnableSpanContextAttrs = true
+	return
 }
 
 func (cfg TracerConfig) GetTracingConfig() TracerConfig {
