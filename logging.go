@@ -46,7 +46,7 @@ func (lsp loggingSpanProcessor) OnStart(ctx context.Context, s sdktrace.ReadWrit
 	if fields := GetLogFields(ctx); fields != nil {
 		s.SetAttributes(append(fields, s.Attributes()...)...)
 	}
-	lsp.startLogger.Debug("start "+s.Name(), lsp.spanToZapFields(s)...)
+	lsp.startLogger.Debug("⬎ "+s.Name(), lsp.spanToZapFields(s)...)
 }
 
 type zapClock struct {
@@ -71,9 +71,33 @@ func (lsp loggingSpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 		level = zapcore.DebugLevel
 	}
 	for _, ev := range s.Events() {
-		lsp.endLogger.WithOptions(zap.WithClock(zapClock{ev.Time})).Log(level, ev.Name+" "+s.Name(), lsp.eventToZapFields(s, ev)...)
+		eventLevel := level
+		if level, found := getLogLevel(ev); found {
+			eventLevel = level
+		}
+		lsp.endLogger.WithOptions(zap.WithClock(zapClock{ev.Time})).Log(eventLevel, "⮕ "+s.Name()+" "+ev.Name, lsp.eventToZapFields(s, ev)...)
 	}
-	lsp.endLogger.Log(level, "end "+s.Name(), lsp.spanToZapFields(s)...)
+	lsp.endLogger.Log(level, "⬑ "+s.Name(), lsp.spanToZapFields(s)...)
+}
+
+const logLevelKey attribute.Key = "log-level"
+
+func LogLevelAttr(level zapcore.Level) attribute.KeyValue {
+	return attribute.KeyValue{
+		Key:   logLevelKey,
+		Value: attribute.IntValue(int(level)),
+	}
+}
+
+func getLogLevel(ev sdktrace.Event) (level zapcore.Level, found bool) {
+	for _, attr := range ev.Attributes {
+		if attr.Key == logLevelKey {
+			level = zapcore.Level(attr.Value.AsInt64())
+			found = true
+			break
+		}
+	}
+	return
 }
 
 func (lsp loggingSpanProcessor) Shutdown(ctx context.Context) error   { return nil }
