@@ -60,8 +60,8 @@ func MonikerAttrFromEnv() attribute.KeyValue {
 
 const RequestIDKey = attribute.Key("request.id")
 
-func RequestID(id fmt.Stringer) attribute.KeyValue {
-	return RequestIDKey.String(id.String())
+func RequestID(id string) attribute.KeyValue {
+	return RequestIDKey.String(id)
 }
 
 func AppEnvFromEnv() attribute.KeyValue {
