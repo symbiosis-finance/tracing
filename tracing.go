@@ -198,7 +198,10 @@ func InitTracer(ctx context.Context, cfg TracerConfig, logger *zap.Logger, resou
 	}
 	tp := newTraceProvider(ctx, exp, cfg, logger, resourceAttrs)
 	otel.SetTracerProvider(tp)
-	otel.SetTextMapPropagator(propagation.TraceContext{})
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	))
 }
 
 func ShutdownTracer() {

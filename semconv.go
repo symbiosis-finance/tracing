@@ -58,6 +58,12 @@ func MonikerAttrFromEnv() attribute.KeyValue {
 	return AttributeFromEnv(MonikerKey, "MONIKER")
 }
 
+const RequestIDKey = attribute.Key("request.id")
+
+func RequestID(id fmt.Stringer) attribute.KeyValue {
+	return RequestIDKey.String(id.String())
+}
+
 func AppEnvFromEnv() attribute.KeyValue {
 	return AttributeFromEnv(semconv.ServiceNamespaceKey, "APP_ENV")
 }
