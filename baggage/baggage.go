@@ -22,7 +22,7 @@ func RequestIDFromContext(ctx context.Context) string {
 }
 
 func contextWithMember(ctx context.Context, member baggage.Member) context.Context {
-	bag, err := baggage.New(member)
+	bag, err := baggage.FromContext(ctx).SetMember(member)
 	if err != nil {
 		return ctx
 	}

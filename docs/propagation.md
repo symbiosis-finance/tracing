@@ -18,7 +18,7 @@ id := baggage.RequestIDFromContext(ctx)
 
 Because it rides in the standard `baggage` header, the request ID survives process hops as long as both sides use the OpenTelemetry propagator.
 
-`WithRequestID` builds a fresh baggage containing just the `request.id` member, so set it once at the request edge before adding anything else to the baggage.
+`WithRequestID` sets the `request.id` member on the context's existing baggage, preserving any other members already stored there.
 
 To also stamp the request ID on spans and log lines, combine it with `AddLogFields`:
 
