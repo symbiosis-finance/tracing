@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test
+        run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
+
+      - name: Coverage report
+        run: |
+          {
+            echo '### Test coverage'
+            echo '```'
+            go tool cover -func=coverage.out
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          go tool cover -func=coverage.out | tail -1
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: coverage.out
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
+
+      # golangci-lint is pinned in tools/go.mod so CI matches `go tool golangci-lint` locally
+      - name: Lint
+        run: go tool golangci-lint run ./...
