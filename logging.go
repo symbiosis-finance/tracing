@@ -31,6 +31,7 @@ func newLoggingSpanProcessor(logger *zap.Logger, cfg TracerLogsConfig) loggingSp
 	}
 }
 
+// GetLogFields returns the attributes stored in ctx by AddLogFields, or nil.
 func GetLogFields(ctx context.Context) []attribute.KeyValue {
 	if v := ctx.Value(ctxAttributeKey); v != nil {
 		return v.([]attribute.KeyValue)
@@ -38,6 +39,9 @@ func GetLogFields(ctx context.Context) []attribute.KeyValue {
 	return nil
 }
 
+// AddLogFields stores attributes in the context; every span started from the
+// returned context picks them up automatically as span attributes, so they
+// appear both on the exported span and in its log lines.
 func AddLogFields(ctx context.Context, fields ...attribute.KeyValue) context.Context {
 	return context.WithValue(ctx, ctxAttributeKey, append(GetLogFields(ctx), fields...))
 }
@@ -82,6 +86,10 @@ func (lsp loggingSpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 
 const logLevelKey attribute.Key = "log-level"
 
+// LogLevelAttr returns a span event attribute that overrides the zap level the
+// logging span processor uses for that event's log line:
+//
+//	span.AddEvent("cache miss", trace.WithAttributes(tracing.LogLevelAttr(zapcore.WarnLevel)))
 func LogLevelAttr(level zapcore.Level) attribute.KeyValue {
 	return attribute.KeyValue{
 		Key:   logLevelKey,
@@ -103,6 +111,8 @@ func getLogLevel(ev sdktrace.Event) (level zapcore.Level, found bool) {
 func (lsp loggingSpanProcessor) Shutdown(ctx context.Context) error   { return nil }
 func (lsp loggingSpanProcessor) ForceFlush(ctx context.Context) error { return nil }
 
+// AttributeToZapField converts an OpenTelemetry attribute to a zap field of
+// the matching type. Invalid attributes become zap.Skip().
 func AttributeToZapField(attr attribute.KeyValue) zap.Field {
 	if !attr.Valid() {
 		return zap.Skip()
@@ -190,6 +200,11 @@ func resourceToZapFields(r *resource.Resource) (fields []zap.Field) {
 	return
 }
 
+// DefaultZapFields returns the service identity fields (version, environment,
+// moniker, service name) for stamping a base logger consistently with the
+// trace resource attributes:
+//
+//	logger := zap.Must(zap.NewProduction()).With(tracing.DefaultZapFields()...)
 func DefaultZapFields() []zap.Field {
 	return attributesToZapFields(
 		VersionAttr(),

@@ -101,6 +101,10 @@ func (metricsSpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 func (metricsSpanProcessor) Shutdown(ctx context.Context) error   { return nil }
 func (metricsSpanProcessor) ForceFlush(ctx context.Context) error { return nil }
 
+// RunMetricsApi starts an HTTP server on the given port serving the default
+// Prometheus registry at /metrics. The server runs in the background and shuts
+// down when ctx is cancelled. InitTracer calls it when TracerConfig.MetricsPort
+// is non-zero.
 func RunMetricsApi(ctx context.Context, port int, logger *zap.Logger) {
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())

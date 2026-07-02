@@ -1,3 +1,18 @@
+// Package tracing provides an opinionated OpenTelemetry tracing setup for Go
+// services: one-call initialization with OTLP (gRPC/HTTP) or stdout export,
+// mirroring of spans to zap logs, Prometheus span metrics, automatic resource
+// attributes, and typed attribute constructors for blockchain semantics.
+//
+// Typical usage:
+//
+//	tracing.InitTracer(ctx, cfg, logger)
+//	defer tracing.ShutdownTracer()
+//
+//	func doWork(ctx context.Context) (err error) {
+//		ctx, span := tracing.StartSpan(ctx, "doWork")
+//		defer tracing.EndSpan(span, &err)
+//		// ...
+//	}
 package tracing
 
 import (
@@ -100,6 +115,7 @@ func newTraceProvider(ctx context.Context, exp sdktrace.SpanExporter, cfg Tracer
 	return
 }
 
+// Map returns an iterator that yields f applied to every element of seq.
 func Map[T, U any](seq iter.Seq[T], f func(T) U) iter.Seq[U] {
 	return func(yield func(U) bool) {
 		for a := range seq {
@@ -110,6 +126,7 @@ func Map[T, U any](seq iter.Seq[T], f func(T) U) iter.Seq[U] {
 	}
 }
 
+// Map2 returns a key-value iterator that yields f applied to every element of seq.
 func Map2[T, U, V any](seq iter.Seq[T], f func(T) (U, V)) iter.Seq2[U, V] {
 	return func(yield func(U, V) bool) {
 		for a := range seq {
@@ -142,12 +159,15 @@ func (s filteringSampler) Description() string {
 	return "FilteringSampler"
 }
 
+// TracerLogsConfig selects which extra fields the logging span processor
+// attaches to every span log line.
 type TracerLogsConfig struct {
-	EnableResourceAttrs    bool
-	EnableParentSpanAttrs  bool
-	EnableSpanContextAttrs bool
+	EnableResourceAttrs    bool // resource attributes (except telemetry.*)
+	EnableParentSpanAttrs  bool // parent trace/span IDs
+	EnableSpanContextAttrs bool // own trace/span IDs
 }
 
+// TracerConfig configures the tracer provider created by InitTracer.
 type TracerConfig struct {
 	// Only one of outputs is used
 	EnableStdout bool
@@ -161,11 +181,15 @@ type TracerConfig struct {
 	SpanBlacklist []string // List of spans to filter out
 }
 
+// DefaultTracerConfig returns a config with span context attributes enabled
+// in log lines and everything else disabled.
 func DefaultTracerConfig() (cfg TracerConfig) {
 	cfg.LogFilters.EnableSpanContextAttrs = true
 	return
 }
 
+// GetTracingConfig returns the config itself, letting TracerConfig be embedded
+// in a larger service config and passed around behind an interface.
 func (cfg TracerConfig) GetTracingConfig() TracerConfig {
 	return cfg
 }
@@ -180,6 +204,14 @@ func basicAuthOption(httpUrl string) otlptracehttp.Option {
 	})
 }
 
+// InitTracer builds the exporter selected by cfg (stdout, OTLP gRPC, or OTLP
+// HTTP — checked in that order), registers a global tracer provider with the
+// configured span processors, and installs a composite W3C TraceContext +
+// Baggage propagator. Explicitly passed resourceAttrs take precedence over the
+// automatically detected ones (hostname, service instance ID, version, and
+// SERVICE/APP_ENV/MONIKER environment variables). If cfg.MetricsPort is
+// non-zero, an HTTP server exposing Prometheus metrics on /metrics is started
+// and shut down when ctx is cancelled.
 func InitTracer(ctx context.Context, cfg TracerConfig, logger *zap.Logger, resourceAttrs ...attribute.KeyValue) {
 	var exp sdktrace.SpanExporter
 	if cfg.EnableStdout {
@@ -204,6 +236,8 @@ func InitTracer(ctx context.Context, cfg TracerConfig, logger *zap.Logger, resou
 	))
 }
 
+// ShutdownTracer flushes and shuts down the global tracer provider installed
+// by InitTracer, waiting at most one second.
 func ShutdownTracer() {
 	if tp, ok := otel.GetTracerProvider().(*sdktrace.TracerProvider); ok {
 		// This operation could block
@@ -215,10 +249,13 @@ func ShutdownTracer() {
 
 var defaultTracerName string = "github.com/symbiosis-finance/tracing"
 
+// Tracer returns the package-level tracer from the global tracer provider.
 func Tracer() trace.Tracer {
 	return otel.Tracer(defaultTracerName)
 }
 
+// TrackError records err on the span and sets the span status: Error with the
+// error message for a non-nil err, Ok otherwise.
 func TrackError(span trace.Span, err error) {
 	span.RecordError(err)
 	if err == nil {
@@ -228,6 +265,12 @@ func TrackError(span trace.Span, err error) {
 	}
 }
 
+// StartSpan starts a span using the package-level tracer. If ctx carries a
+// deadline, the remaining time is recorded as a context_timeout attribute.
+// Pair it with EndSpan:
+//
+//	ctx, span := tracing.StartSpan(ctx, "operation")
+//	defer tracing.EndSpan(span, &err)
 func StartSpan(ctx context.Context, spanName string, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
 	if deadline, ok := ctx.Deadline(); ok {
 		opts = append(opts, trace.WithAttributes(attribute.Stringer("context_timeout", time.Until(deadline))))
@@ -235,6 +278,9 @@ func StartSpan(ctx context.Context, spanName string, opts ...trace.SpanStartOpti
 	return Tracer().Start(ctx, spanName, opts...)
 }
 
+// EndSpan sets the given attributes and ends the span. If err is non-nil it is
+// dereferenced at call time (so it works with named returns in a defer) and
+// recorded via TrackError, setting the span status accordingly.
 func EndSpan(span trace.Span, err *error, attributes ...attribute.KeyValue) {
 	if err != nil {
 		TrackError(span, *err)
@@ -243,6 +289,8 @@ func EndSpan(span trace.Span, err *error, attributes ...attribute.KeyValue) {
 	span.End()
 }
 
+// NilStringer is like attribute.Stringer but safe for nil values: instead of
+// panicking on a nil s it produces the string "<nil>".
 func NilStringer(name string, s fmt.Stringer) attribute.KeyValue {
 	if isNil(s) {
 		return attribute.String(name, "<nil>")
@@ -264,18 +312,23 @@ func isNil(i any) bool {
 	}
 }
 
-// Store trace attributes from ctx to MapCarrier
+// StoreTrace injects the trace context and baggage from ctx into a MapCarrier
+// using the global propagator, for transports without header support (message
+// queues, persisted jobs). Restore it on the consuming side with LoadTrace.
 func StoreTrace(ctx context.Context) (m propagation.MapCarrier) {
 	m = make(propagation.MapCarrier)
 	otel.GetTextMapPropagator().Inject(ctx, m)
 	return
 }
 
-// Load trace attributes from MapCarrier to returned context
+// LoadTrace extracts the trace context and baggage stored by StoreTrace from
+// the carrier and returns a context carrying them.
 func LoadTrace(ctx context.Context, m propagation.MapCarrier) context.Context {
 	return otel.GetTextMapPropagator().Extract(ctx, m)
 }
 
+// ErrorAttr returns a string attribute holding the error message, or an
+// invalid (skipped) attribute if err is nil.
 func ErrorAttr(key string, err error) (attr attribute.KeyValue) {
 	if err != nil {
 		return attribute.Key(key).String(err.Error())
@@ -283,6 +336,8 @@ func ErrorAttr(key string, err error) (attr attribute.KeyValue) {
 	return
 }
 
+// StringerSlice returns a string-slice attribute with the String() rendering
+// of every element of values.
 func StringerSlice[T fmt.Stringer](k string, values []T) (attr attribute.KeyValue) {
 	vals := make([]string, len(values))
 	for i, v := range values {
