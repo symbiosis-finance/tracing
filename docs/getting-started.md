@@ -6,7 +6,7 @@
 go get github.com/symbiosis-finance/tracing
 ```
 
-Requires Go 1.26+.
+Requires Go 1.27.1+.
 
 ## Initialization
 
