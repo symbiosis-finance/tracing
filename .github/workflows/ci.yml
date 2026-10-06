@@ -54,6 +54,6 @@ jobs:
             go.sum
             tools/go.sum
 
-      # golangci-lint is pinned in tools/go.mod so CI matches `go tool golangci-lint` locally
+      # golangci-lint is pinned in tools/go.mod, so CI and `make lint` run the same one
       - name: Lint
-        run: go tool golangci-lint run ./...
+        run: make lint
