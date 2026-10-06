@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sync"
 	"testing"
 	"time"
 
@@ -94,21 +95,33 @@ func (sc *spanCapture) OnEnd(s sdktrace.ReadOnlySpan)                         { 
 func (sc *spanCapture) Shutdown(ctx context.Context) error                    { return nil }
 func (sc *spanCapture) ForceFlush(ctx context.Context) error                  { return nil }
 
+// Adds /teapot to the metrics server, once per process: the route outlives a
+// test run, and adding it again would panic under -count.
+var handleTeapot = sync.OnceFunc(func() {
+	HandleMetricsApi("/teapot", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTeapot)
+	}))
+})
+
+// The server serves /metrics, and a handler HandleMetricsApi added beside it.
 func TestRunMetricsApi(t *testing.T) {
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	port := lis.Addr().(*net.TCPAddr).Port
 	require.NoError(t, lis.Close())
 
+	handleTeapot()
 	RunMetricsApi(t.Context(), port, zap.NewNop())
 
-	url := fmt.Sprintf("http://127.0.0.1:%d/metrics", port)
-	var resp *http.Response
-	require.Eventually(t, func() bool {
-		resp, err = http.Get(url) //nolint:noctx
-		return err == nil
-	}, 5*time.Second, 20*time.Millisecond, "metrics endpoint should come up")
-	defer func() { require.NoError(t, resp.Body.Close()) }()
-
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	get := func(path string) *http.Response {
+		var resp *http.Response
+		require.Eventually(t, func() bool {
+			resp, err = http.Get(fmt.Sprintf("http://127.0.0.1:%d%s", port, path)) //nolint:noctx
+			return err == nil
+		}, 5*time.Second, 20*time.Millisecond, "metrics endpoint should come up")
+		require.NoError(t, resp.Body.Close())
+		return resp
+	}
+	assert.Equal(t, http.StatusOK, get("/metrics").StatusCode)
+	assert.Equal(t, http.StatusTeapot, get("/teapot").StatusCode)
 }

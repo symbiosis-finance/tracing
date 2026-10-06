@@ -101,17 +101,28 @@ func (metricsSpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 func (metricsSpanProcessor) Shutdown(ctx context.Context) error   { return nil }
 func (metricsSpanProcessor) ForceFlush(ctx context.Context) error { return nil }
 
-// RunMetricsApi starts an HTTP server on the given port serving the default
-// Prometheus registry at /metrics. The server runs in the background and shuts
-// down when ctx is cancelled. InitTracer calls it when TracerConfig.MetricsPort
-// is non-zero.
-func RunMetricsApi(ctx context.Context, port int, logger *zap.Logger) {
+// The routes RunMetricsApi serves: the default Prometheus registry at /metrics,
+// and whatever HandleMetricsApi adds.
+var metricsMux = func() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())
+	return mux
+}()
+
+// Serves handler at pattern beside /metrics, on the server RunMetricsApi starts,
+// as http.ServeMux.Handle does. Panics on a pattern already handled.
+func HandleMetricsApi(pattern string, handler http.Handler) {
+	metricsMux.Handle(pattern, handler)
+}
+
+// Starts an HTTP server on port, in the background until ctx ends, serving the
+// default Prometheus registry at /metrics and the handlers HandleMetricsApi
+// added. InitTracer calls it when TracerConfig.MetricsPort is non-zero.
+func RunMetricsApi(ctx context.Context, port int, logger *zap.Logger) {
 	server := http.Server{
 		ReadHeaderTimeout: 5 * time.Second,
 		Addr:              fmt.Sprintf(":%d", port),
-		Handler:           mux,
+		Handler:           metricsMux,
 	}
 	logger.Info("Create the monitoring", zap.Int("port", port))
 	go func() {
