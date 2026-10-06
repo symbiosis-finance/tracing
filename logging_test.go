@@ -23,10 +23,10 @@ func TestAttributeToZapField(t *testing.T) {
 		attr attribute.KeyValue
 		want any
 	}{
-		"bool":         {attribute.Bool("k", true), true},
-		"int64":        {attribute.Int64("k", 42), int64(42)},
-		"float64":      {attribute.Float64("k", 4.2), 4.2},
-		"string":       {attribute.String("k", "v"), "v"},
+		"bool":    {attribute.Bool("k", true), true},
+		"int64":   {attribute.Int64("k", 42), int64(42)},
+		"float64": {attribute.Float64("k", 4.2), 4.2},
+		"string":  {attribute.String("k", "v"), "v"},
 		// the map encoder stores array elements as []interface{}
 		"bool-slice":   {attribute.BoolSlice("k", []bool{true, false}), []any{true, false}},
 		"int64-slice":  {attribute.Int64Slice("k", []int64{1, 2}), []any{int64(1), int64(2)}},

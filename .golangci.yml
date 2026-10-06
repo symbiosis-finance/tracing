@@ -1,0 +1,7 @@
+version: "2"
+
+# gofmt runs as a formatter, so the CI lint job fails on unformatted code;
+# `go tool golangci-lint fmt` rewrites it.
+formatters:
+  enable:
+    - gofmt
