@@ -194,6 +194,17 @@ func (cfg TracerConfig) GetTracingConfig() TracerConfig {
 	return cfg
 }
 
+// httpTracesURL appends the default OTLP traces path to a collector URL given
+// without one. Since otlptracehttp v1.45 such a URL targets "/" instead of
+// "/v1/traces", which collectors answer with 404.
+func httpTracesURL(httpUrl string) string {
+	u := tryerr.Must(url.Parse(httpUrl))
+	if u.Path == "" || u.Path == "/" {
+		u.Path = "/v1/traces"
+	}
+	return u.String()
+}
+
 func basicAuthOption(httpUrl string) otlptracehttp.Option {
 	u := tryerr.Must(url.Parse(httpUrl))
 	if u.User == nil {
@@ -219,7 +230,7 @@ func InitTracer(ctx context.Context, cfg TracerConfig, logger *zap.Logger, resou
 	} else if cfg.GrpcUrl != "" {
 		exp = tryerr.Must(otlptracegrpc.New(ctx, otlptracegrpc.WithEndpointURL(cfg.GrpcUrl)))
 	} else if cfg.HttpUrl != "" {
-		options := []otlptracehttp.Option{otlptracehttp.WithEndpointURL(cfg.HttpUrl)}
+		options := []otlptracehttp.Option{otlptracehttp.WithEndpointURL(httpTracesURL(cfg.HttpUrl))}
 		if auth := basicAuthOption(cfg.HttpUrl); auth != nil {
 			options = append(options, auth)
 		}
