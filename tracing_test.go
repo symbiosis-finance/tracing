@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"maps"
+	"net/http"
+	"net/http/httptest"
 	"slices"
 	"testing"
 	"time"
@@ -248,6 +250,45 @@ func TestMap2(t *testing.T) {
 func TestBasicAuthOption(t *testing.T) {
 	assert.Nil(t, basicAuthOption("http://collector:4318/v1/traces"))
 	assert.NotNil(t, basicAuthOption("http://user:pass@collector:4318/v1/traces"))
+}
+
+func TestHttpTracesURL(t *testing.T) {
+	for in, want := range map[string]string{
+		"http://collector:4318":                      "http://collector:4318/v1/traces",
+		"http://collector:4318/":                     "http://collector:4318/v1/traces",
+		"http://user:pass@collector:4318":            "http://user:pass@collector:4318/v1/traces",
+		"http://collector:4318/v1/traces":            "http://collector:4318/v1/traces",
+		"https://collector.example/custom/v1/traces": "https://collector.example/custom/v1/traces",
+	} {
+		assert.Equal(t, want, httpTracesURL(in), in)
+	}
+}
+
+func TestInitTracerExportsToDefaultHTTPPath(t *testing.T) {
+	prevTP := otel.GetTracerProvider()
+	prevProp := otel.GetTextMapPropagator()
+	t.Cleanup(func() {
+		otel.SetTracerProvider(prevTP)
+		otel.SetTextMapPropagator(prevProp)
+	})
+
+	paths := make(chan string, 10)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths <- r.URL.Path
+	}))
+	defer srv.Close()
+
+	InitTracer(context.Background(), TracerConfig{HttpUrl: srv.URL}, zap.NewNop())
+	_, span := StartSpan(context.Background(), "export")
+	span.End()
+	ShutdownTracer()
+
+	select {
+	case path := <-paths:
+		assert.Equal(t, "/v1/traces", path)
+	case <-time.After(5 * time.Second):
+		t.Fatal("no spans exported")
+	}
 }
 
 func TestInitTracerAndShutdown(t *testing.T) {
